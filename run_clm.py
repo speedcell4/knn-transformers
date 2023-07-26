@@ -21,41 +21,39 @@ https://huggingface.co/models?filter=causal-lm
 """
 # You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
 
+import datasets
 import itertools
 import logging
 import math
 import os
-    
 import sys
-from dataclasses import dataclass, field
-from typing import Optional
-
 import torch
-
-import datasets
+import transformers
+from dataclasses import dataclass
+from dataclasses import field
 from datasets import load_dataset
 from tqdm import tqdm
-
-import transformers
-from transformers import (
-    CONFIG_MAPPING,
-    MODEL_FOR_CAUSAL_LM_MAPPING,
-    AutoConfig,
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    EarlyStoppingCallback,
-    HfArgumentParser,
-    Trainer,
-    TrainingArguments,
-    default_data_collator,
-    set_seed,
-)
+from transformers import AutoConfig
+from transformers import AutoModelForCausalLM
+from transformers import AutoTokenizer
+from transformers import CONFIG_MAPPING
+from transformers import default_data_collator
+from transformers import EarlyStoppingCallback
+from transformers import HfArgumentParser
+from transformers import MODEL_FOR_CAUSAL_LM_MAPPING
+from transformers import set_seed
+from transformers import Trainer
+from transformers import TrainingArguments
 from transformers.testing_utils import CaptureLogger
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
+from typing import Optional
 
-from knnlm import KNNWrapper, KNNSaver, KEY_TYPE, DIST
+from knnlm import DIST
+from knnlm import KEY_TYPE
+from knnlm import KNNSaver
+from knnlm import KNNWrapper
 from retomaton import RetomatonWrapper
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -63,11 +61,11 @@ check_min_version("4.11.0.dev0")
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 logger = logging.getLogger(__name__)
 
-
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 padding_index = -100
+
 
 @dataclass
 class ModelArguments:
@@ -79,7 +77,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": "The model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+                    "Don't set if you want to train a model from scratch."
         },
     )
     model_type: Optional[str] = field(
@@ -90,7 +88,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": "Override some existing default config settings when a model is trained from scratch. Example: "
-            "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+                    "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
         },
     )
     config_name: Optional[str] = field(
@@ -115,7 +113,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+                    "with private models)."
         },
     )
 
@@ -147,14 +145,14 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+                    "value if set."
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+                    "value if set."
         },
     )
 
@@ -162,8 +160,8 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": "Optional input sequence length after tokenization. "
-            "The training dataset will be truncated in block of this size for training. "
-            "Default to the model max input length for single sentence inputs (take into account special tokens)."
+                    "The training dataset will be truncated in block of this size for training. "
+                    "Default to the model max input length for single sentence inputs (take into account special tokens)."
         },
     )
     overwrite_cache: bool = field(
@@ -188,7 +186,6 @@ class DataTrainingArguments:
     patience: int = field(default=None)
     prompt: str = field(default=None)
 
-
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
             raise ValueError("Need either a dataset name or a training/validation file.")
@@ -199,6 +196,7 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+
 
 @dataclass
 class KNNArguments:
@@ -235,6 +233,7 @@ class KNNArguments:
     num_clusters: int = field(default=500000)
     sample_size: int = field(default=20000000)
     members: str = field(default=None)
+
 
 def main():
     # See all possible arguments in src/transformers/training_args.py
@@ -406,7 +405,7 @@ def main():
     else:
         model = AutoModelForCausalLM.from_config(config)
         n_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
-        logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
+        logger.info(f"Training new model from scratch - Total size={n_params / 2 ** 20:.2f}M params")
 
     model.resize_token_embeddings(len(tokenizer))
 
@@ -479,7 +478,6 @@ def main():
     #     result["labels"] = result["input_ids"].copy()
     #     return result
 
-
     def group_texts(examples):
         # Concatenate all texts.
         concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
@@ -507,7 +505,7 @@ def main():
                 pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
                 cur_input_ids += [pad_token_id] * padding_size
                 cur_labels += [padding_index] * padding_size
-            
+
             input_ids.append(cur_input_ids)
             attention_mask.append([1] * len(cur_labels))
             labels.append(cur_labels)
@@ -532,7 +530,7 @@ def main():
         )
 
     for split, data in lm_datasets.items():
-        total_eval_tokens = 0        
+        total_eval_tokens = 0
         for chunk in data['labels']:
             total_eval_tokens += len([x for x in chunk[1:] if x != padding_index])
         logger.info(f'[{split}] Total eval tokens: {total_eval_tokens}')
@@ -562,29 +560,34 @@ def main():
         tokenizer=tokenizer,
         # Data collator will default to DataCollatorWithPadding, so we change it.
         data_collator=default_data_collator,
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=data_args.patience)] if data_args.patience is not None else None,
+        callbacks=[EarlyStoppingCallback(
+            early_stopping_patience=data_args.patience)] if data_args.patience is not None else None,
     )
 
     if knn_args.retomaton or knn_args.cluster_dstore:
-        knn_wrapper = RetomatonWrapper(dstore_size=knn_args.dstore_size, dstore_dir=knn_args.dstore_dir, 
-            dimension=dimension, 
-            knn_sim_func=knn_args.knn_sim_func, knn_keytype=knn_args.knn_keytype,
-            no_load_keys=knn_args.no_load_keys, move_dstore_to_mem=knn_args.move_dstore_to_mem, knn_gpu=knn_args.knn_gpu,
-            recompute_dists=knn_args.recompute_dists,
-            k=knn_args.k, lmbda=knn_args.lmbda, knn_temp=knn_args.knn_temp, probe=knn_args.probe,
-            no_pointer=knn_args.no_pointer, min_knns=knn_args.min_knns, max_knns=knn_args.max_knns,
-            members=knn_args.members)
+        knn_wrapper = RetomatonWrapper(dstore_size=knn_args.dstore_size, dstore_dir=knn_args.dstore_dir,
+                                       dimension=dimension,
+                                       knn_sim_func=knn_args.knn_sim_func, knn_keytype=knn_args.knn_keytype,
+                                       no_load_keys=knn_args.no_load_keys,
+                                       move_dstore_to_mem=knn_args.move_dstore_to_mem, knn_gpu=knn_args.knn_gpu,
+                                       recompute_dists=knn_args.recompute_dists,
+                                       k=knn_args.k, lmbda=knn_args.lmbda, knn_temp=knn_args.knn_temp,
+                                       probe=knn_args.probe,
+                                       no_pointer=knn_args.no_pointer, min_knns=knn_args.min_knns,
+                                       max_knns=knn_args.max_knns,
+                                       members=knn_args.members)
     elif knn_args.knn:
-        knn_wrapper = KNNWrapper(dstore_size=knn_args.dstore_size, dstore_dir=knn_args.dstore_dir, 
-            dimension= dimension, 
-            knn_sim_func=knn_args.knn_sim_func, knn_keytype=knn_args.knn_keytype,
-            no_load_keys=knn_args.no_load_keys, move_dstore_to_mem=knn_args.move_dstore_to_mem, knn_gpu=knn_args.knn_gpu,
-            recompute_dists=knn_args.recompute_dists,
-            k=knn_args.k, lmbda=knn_args.lmbda, knn_temp=knn_args.knn_temp, probe=knn_args.probe)
+        knn_wrapper = KNNWrapper(dstore_size=knn_args.dstore_size, dstore_dir=knn_args.dstore_dir,
+                                 dimension=dimension,
+                                 knn_sim_func=knn_args.knn_sim_func, knn_keytype=knn_args.knn_keytype,
+                                 no_load_keys=knn_args.no_load_keys, move_dstore_to_mem=knn_args.move_dstore_to_mem,
+                                 knn_gpu=knn_args.knn_gpu,
+                                 recompute_dists=knn_args.recompute_dists,
+                                 k=knn_args.k, lmbda=knn_args.lmbda, knn_temp=knn_args.knn_temp, probe=knn_args.probe)
     elif knn_args.save_knnlm_dstore or knn_args.build_index:
-        knn_wrapper = KNNSaver(dstore_size=knn_args.dstore_size, dstore_dir=knn_args.dstore_dir, 
-            dimension=dimension, knn_keytype=knn_args.knn_keytype)
-    
+        knn_wrapper = KNNSaver(dstore_size=knn_args.dstore_size, dstore_dir=knn_args.dstore_dir,
+                               dimension=dimension, knn_keytype=knn_args.knn_keytype)
+
     if knn_wrapper is not None:
         knn_wrapper.break_into(model)
 
@@ -629,9 +632,10 @@ def main():
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
-    
+
     if data_args.prompt is not None:
-        generated_ids = model.generate(tokenizer.encode(data_args.prompt, return_tensors='pt').to(training_args.device), num_beams=5, num_return_sequences=5, do_sample=True)
+        generated_ids = model.generate(tokenizer.encode(data_args.prompt, return_tensors='pt').to(training_args.device),
+                                       num_beams=5, num_return_sequences=5, do_sample=True)
         for i, beam_output in enumerate(generated_ids):
             logger.info(f'{i}: {tokenizer.decode(beam_output)}')
 
@@ -640,7 +644,7 @@ def main():
 
     if knn_args.cluster_dstore:
         knn_wrapper.cluster_dstore(num_clusters=knn_args.num_clusters, sample_size=knn_args.sample_size, model=model)
-    
+
     if knn_wrapper is not None:
         knn_wrapper.break_out()
 

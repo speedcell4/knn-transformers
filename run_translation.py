@@ -18,39 +18,40 @@ Fine-tuning the library models for sequence to sequence.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
+import datasets
 import logging
+import numpy as np
 import os
 import sys
-from dataclasses import dataclass, field
-from typing import Optional
-
-import datasets
-import numpy as np
-from datasets import load_dataset, load_metric
-
 import transformers
-from transformers import (
-    AutoConfig,
-    AutoModelForSeq2SeqLM,
-    AutoTokenizer,
-    DataCollatorForSeq2Seq,
-    EarlyStoppingCallback,
-    HfArgumentParser,
-    M2M100Tokenizer,
-    MBart50Tokenizer,
-    MBart50TokenizerFast,
-    MBartTokenizer,
-    MBartTokenizerFast,
-    Seq2SeqTrainer,
-    Seq2SeqTrainingArguments,
-    default_data_collator,
-    set_seed,
-)
+from dataclasses import dataclass
+from dataclasses import field
+from datasets import load_dataset
+from datasets import load_metric
+from transformers import AutoConfig
+from transformers import AutoModelForSeq2SeqLM
+from transformers import AutoTokenizer
+from transformers import DataCollatorForSeq2Seq
+from transformers import default_data_collator
+from transformers import EarlyStoppingCallback
+from transformers import HfArgumentParser
+from transformers import M2M100Tokenizer
+from transformers import MBart50Tokenizer
+from transformers import MBart50TokenizerFast
+from transformers import MBartTokenizer
+from transformers import MBartTokenizerFast
+from transformers import Seq2SeqTrainer
+from transformers import Seq2SeqTrainingArguments
+from transformers import set_seed
 from transformers.trainer_utils import get_last_checkpoint
 # from transformers.utils import check_min_version #, send_example_telemetry
 from transformers.utils.versions import require_version
+from typing import Optional
 
-from knnlm import KNNWrapper, KNNSaver, KEY_TYPE, DIST
+from knnlm import DIST
+from knnlm import KEY_TYPE
+from knnlm import KNNSaver
+from knnlm import KNNWrapper
 from retomaton import RetomatonWrapper
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -251,6 +252,7 @@ class DataTrainingArguments:
         if self.val_max_target_length is None:
             self.val_max_target_length = self.max_target_length
 
+
 @dataclass
 class KNNArguments:
     """
@@ -286,6 +288,7 @@ class KNNArguments:
     num_clusters: int = field(default=1000000)
     sample_size: int = field(default=40000000)
     members: str = field(default=None)
+
 
 def main():
     # See all possible arguments in src/transformers/training_args.py
@@ -438,26 +441,30 @@ def main():
     knn_wrapper = None
     knn_args.seed = training_args.seed
     if knn_args.retomaton or knn_args.cluster_dstore:
-        knn_wrapper = RetomatonWrapper(dstore_size=knn_args.dstore_size, dstore_dir=knn_args.dstore_dir, 
-            dimension=dimension, 
-            knn_sim_func=knn_args.knn_sim_func, knn_keytype=knn_args.knn_keytype,
-            no_load_keys=knn_args.no_load_keys, move_dstore_to_mem=knn_args.move_dstore_to_mem, knn_gpu=knn_args.knn_gpu,
-            recompute_dists=knn_args.recompute_dists,
-            k=knn_args.k, lmbda=knn_args.lmbda, knn_temp=knn_args.knn_temp, probe=knn_args.probe,
-            no_pointer=knn_args.no_pointer, min_knns=knn_args.min_knns, max_knns=knn_args.max_knns,
-            members=knn_args.members)
+        knn_wrapper = RetomatonWrapper(dstore_size=knn_args.dstore_size, dstore_dir=knn_args.dstore_dir,
+                                       dimension=dimension,
+                                       knn_sim_func=knn_args.knn_sim_func, knn_keytype=knn_args.knn_keytype,
+                                       no_load_keys=knn_args.no_load_keys,
+                                       move_dstore_to_mem=knn_args.move_dstore_to_mem, knn_gpu=knn_args.knn_gpu,
+                                       recompute_dists=knn_args.recompute_dists,
+                                       k=knn_args.k, lmbda=knn_args.lmbda, knn_temp=knn_args.knn_temp,
+                                       probe=knn_args.probe,
+                                       no_pointer=knn_args.no_pointer, min_knns=knn_args.min_knns,
+                                       max_knns=knn_args.max_knns,
+                                       members=knn_args.members)
     elif knn_args.knn:
-        knn_wrapper = KNNWrapper(dstore_size=knn_args.dstore_size, dstore_dir=knn_args.dstore_dir, 
-            dimension= dimension, 
-            knn_sim_func=knn_args.knn_sim_func, knn_keytype=knn_args.knn_keytype,
-            no_load_keys=knn_args.no_load_keys, move_dstore_to_mem=knn_args.move_dstore_to_mem, knn_gpu=knn_args.knn_gpu,
-            recompute_dists=knn_args.recompute_dists,
-            k=knn_args.k, lmbda=knn_args.lmbda, knn_temp=knn_args.knn_temp, probe=knn_args.probe)
+        knn_wrapper = KNNWrapper(dstore_size=knn_args.dstore_size, dstore_dir=knn_args.dstore_dir,
+                                 dimension=dimension,
+                                 knn_sim_func=knn_args.knn_sim_func, knn_keytype=knn_args.knn_keytype,
+                                 no_load_keys=knn_args.no_load_keys, move_dstore_to_mem=knn_args.move_dstore_to_mem,
+                                 knn_gpu=knn_args.knn_gpu,
+                                 recompute_dists=knn_args.recompute_dists,
+                                 k=knn_args.k, lmbda=knn_args.lmbda, knn_temp=knn_args.knn_temp, probe=knn_args.probe)
     elif knn_args.save_knnlm_dstore or knn_args.build_index:
         training_args.predict_with_generate = False
-        knn_wrapper = KNNSaver(dstore_size=knn_args.dstore_size, dstore_dir=knn_args.dstore_dir, 
-            dimension=dimension, knn_keytype=knn_args.knn_keytype)
-    
+        knn_wrapper = KNNSaver(dstore_size=knn_args.dstore_size, dstore_dir=knn_args.dstore_dir,
+                               dimension=dimension, knn_keytype=knn_args.knn_keytype)
+
     if knn_wrapper is not None:
         knn_wrapper.break_into(model)
 
@@ -543,7 +550,7 @@ def main():
                 load_from_cache_file=not data_args.overwrite_cache,
                 desc="Running tokenizer on train dataset",
             )
-        total_eval_tokens = 0        
+        total_eval_tokens = 0
         for chunk in train_dataset['labels']:
             total_eval_tokens += len([x for x in chunk[1:] if x != -100])
         logger.info(f'[train] Total eval tokens: {total_eval_tokens}')
@@ -565,7 +572,7 @@ def main():
                 load_from_cache_file=not data_args.overwrite_cache,
                 desc="Running tokenizer on validation dataset",
             )
-        total_eval_tokens = 0        
+        total_eval_tokens = 0
         for chunk in eval_dataset['labels']:
             total_eval_tokens += len([x for x in chunk if x != -100])
         logger.info(f'[{data_args.eval_subset}] Total eval tokens: {total_eval_tokens}')
@@ -632,7 +639,6 @@ def main():
         result = {k: round(v, 4) for k, v in result.items()}
         return result
 
-
     # Initialize our Trainer
     trainer = Seq2SeqTrainer(
         model=model,
@@ -642,7 +648,8 @@ def main():
         tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics if training_args.predict_with_generate else None,
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=data_args.patience)] if data_args.patience is not None else None,
+        callbacks=[EarlyStoppingCallback(
+            early_stopping_patience=data_args.patience)] if data_args.patience is not None else None,
     )
 
     # Training
@@ -731,10 +738,10 @@ def main():
 
     if knn_args.cluster_dstore:
         knn_wrapper.cluster_dstore(num_clusters=knn_args.num_clusters, sample_size=knn_args.sample_size, model=model)
-    
+
     if knn_wrapper is not None:
         knn_wrapper.break_out()
-    
+
     return results
 
 
